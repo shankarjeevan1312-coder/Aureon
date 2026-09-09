@@ -32,9 +32,11 @@
   let recognition = null;
   let socket = null;
   let audioPlayer = new Audio();
+  let silenceTimer = null;
+  let currentTranscript = "";
 
   // Voice Modes: "instant" (Web Speech API, 0s delay) vs "neural" (Edge-TTS via server)
-  let voiceMode = "instant"; // Default to instant for lightning response
+  let voiceMode = "instant";
 
   // Register Service Worker for PWA
   if ("serviceWorker" in navigator) {
@@ -100,15 +102,15 @@
 
   function updateOrbBadge() {
     if (isListening) {
-      orbModeBadge.textContent = "LISTENING";
+      orbModeBadge.textContent = "LISTENING...";
       orbModeBadge.style.color = "var(--red-glow)";
       orbModeBadge.style.borderColor = "var(--red-glow)";
     } else if (isProcessing) {
-      orbModeBadge.textContent = "PROCESSING";
+      orbModeBadge.textContent = "PROCESSING...";
       orbModeBadge.style.color = "var(--amber-glow)";
       orbModeBadge.style.borderColor = "var(--amber-glow)";
     } else if (isSpeaking) {
-      orbModeBadge.textContent = "SPEAKING";
+      orbModeBadge.textContent = "SPEAKING...";
       orbModeBadge.style.color = "var(--cyan-glow)";
       orbModeBadge.style.borderColor = "var(--cyan-glow)";
     } else {
@@ -166,66 +168,154 @@
   }
   drawOrb();
 
-  // Speech Recognition (Web Speech API)
+  // Speech Recognition Setup
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;       // Don't close immediately on brief pause!
+    recognition.interimResults = true;    // Show words in real-time as user speaks
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
-      stopAnySpeaking(); // Stop talking whenever user speaks!
+      stopAnySpeaking();
       isListening = true;
+      currentTranscript = "";
       micBtn.classList.add("listening");
-      voiceStatus.textContent = "LISTENING...";
-      if (window.aureonSounds) window.aureonSounds.playWake();
+      voiceStatus.textContent = "LISTENING... (SPEAK NOW)";
+      voiceStatus.style.color = "var(--red-glow)";
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      voiceStatus.textContent = "TRANSCRIBED: " + transcript;
-      handleUserSubmit(transcript);
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          currentTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+
+      const activeText = (currentTranscript + " " + interim).trim();
+      if (activeText) {
+        voiceStatus.textContent = `🗣️ "${activeText}"`;
+        voiceStatus.style.color = "var(--cyan-glow)";
+
+        // Debounce submit after 1.5s of silence
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          if (isListening && activeText) {
+            stopListening();
+            handleUserSubmit(activeText);
+          }
+        }, 1500);
+      }
     };
 
     recognition.onerror = (event) => {
       console.warn("Speech recognition error:", event.error);
-      stopListening();
+      clearTimeout(silenceTimer);
+
+      if (event.error === "not-allowed") {
+        voiceStatus.textContent = "⚠️ MIC BLOCKED: Allow mic access in browser address bar.";
+        voiceStatus.style.color = "var(--red-glow)";
+      } else if (event.error === "network") {
+        voiceStatus.textContent = "⚠️ BRAVE NOTICE: In brave://settings/privacy, enable Google Speech or use Chrome/Edge.";
+        voiceStatus.style.color = "var(--amber-glow)";
+      } else if (event.error !== "no-speech") {
+        voiceStatus.textContent = `VOICE ERROR: ${event.error.toUpperCase()}`;
+      }
+
+      if (event.error !== "no-speech") {
+        stopListening();
+      }
     };
 
     recognition.onend = () => {
-      stopListening();
+      clearTimeout(silenceTimer);
+      if (isListening) {
+        if (currentTranscript.trim()) {
+          handleUserSubmit(currentTranscript.trim());
+        }
+        stopListening();
+      }
     };
   } else {
-    voiceStatus.textContent = "SPEECH API NOT SUPPORTED (USE TEXT)";
+    voiceStatus.textContent = "SPEECH API NOT SUPPORTED IN THIS BROWSER";
   }
 
-  function toggleListening() {
-    stopAnySpeaking(); // Stop any audio immediately on mic click
-    if (!recognition) return;
-    if (isListening) {
-      recognition.stop();
-    } else {
-      try {
-        recognition.start();
-      } catch (e) {
-        console.warn(e);
-      }
+  function startListening() {
+    if (!recognition) {
+      alert("Speech recognition not supported in this browser. Please use Chrome, Edge, or type in the box.");
+      return;
+    }
+    stopAnySpeaking();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.warn("Recognition already started or busy:", e);
     }
   }
 
   function stopListening() {
     isListening = false;
+    clearTimeout(silenceTimer);
     micBtn.classList.remove("listening");
-    voiceStatus.textContent = "CLICK MIC TO SPEAK";
+    if (recognition) {
+      try { recognition.stop(); } catch (e) {}
+    }
+    setTimeout(() => {
+      if (!isListening && !isProcessing && !isSpeaking) {
+        voiceStatus.textContent = "CLICK MIC TO SPEAK";
+        voiceStatus.style.color = "var(--cyan-dim)";
+      }
+    }, 2000);
+  }
+
+  function toggleListening() {
+    if (isListening) {
+      if (currentTranscript.trim()) {
+        const textToSubmit = currentTranscript.trim();
+        stopListening();
+        handleUserSubmit(textToSubmit);
+      } else {
+        stopListening();
+      }
+    } else {
+      startListening();
+    }
   }
 
   micBtn.addEventListener("click", toggleListening);
 
-  // Keyboard shortcut: Spacebar holds to speak if text input is not focused
+  // Push-to-Talk via Spacebar (when not typing in the text box)
+  let spacePressed = false;
   window.addEventListener("keydown", (e) => {
     if (e.code === "Escape") {
       stopAnySpeaking();
+      stopListening();
+      return;
+    }
+
+    if (e.code === "Space" && document.activeElement !== textInput && !spacePressed) {
+      spacePressed = true;
+      e.preventDefault();
+      startListening();
+    }
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space" && spacePressed) {
+      spacePressed = false;
+      e.preventDefault();
+      setTimeout(() => {
+        if (isListening) {
+          if (currentTranscript.trim()) {
+            handleUserSubmit(currentTranscript.trim());
+          }
+          stopListening();
+        }
+      }, 500);
     }
   });
 
@@ -261,7 +351,7 @@
   // Submit User Message
   function handleUserSubmit(message) {
     if (!message || !message.trim()) return;
-    stopAnySpeaking(); // Stop any audio when user enters command
+    stopAnySpeaking();
 
     appendMessage("USER", message, "user");
     textInput.value = "";
@@ -315,11 +405,10 @@
         }
 
         if (targetUrl) {
-          // Open URL in new browser tab
           try {
             window.open(targetUrl, "_blank");
           } catch (e) {
-            console.warn("Popup blocked; fallback to link.", e);
+            console.warn("Browser blocked popup:", e);
           }
           appendUrlButton(targetUrl);
         }
@@ -345,17 +434,15 @@
 
   // Voice Output (Instant Web Speech or Neural Edge-TTS)
   function playVoice(text) {
-    stopAnySpeaking(); // Always cancel any playing audio before starting new speech
+    stopAnySpeaking();
 
     if (!text || !text.trim()) return;
 
     if (voiceMode === "instant" && "speechSynthesis" in window) {
-      // 0ms Latency Instant Browser Speech
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.05;
       utterance.pitch = 1.0;
 
-      // Select a natural voice if available
       const voices = window.speechSynthesis.getVoices();
       const preferredVoice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("David") || v.name.includes("Guy")));
       if (preferredVoice) {
@@ -377,7 +464,6 @@
 
       window.speechSynthesis.speak(utterance);
     } else {
-      // Neural Edge-TTS Mode
       const encoded = encodeURIComponent(text);
       audioPlayer.src = `/api/tts?text=${encoded}`;
       isSpeaking = true;
