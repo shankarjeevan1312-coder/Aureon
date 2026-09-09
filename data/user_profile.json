@@ -1,0 +1,19 @@
+{
+  "user_name": "Revanth",
+  "github_username": "revanthbarthu",
+  "os": "Windows",
+  "assistant_name": "AUREON",
+  "tone": "Composed, concise, articulate, calm, effortlessly efficient",
+  "preferences": {
+    "audio_enabled": true,
+    "voice": "en-US-GuyNeural",
+    "default_shell": "powershell"
+  },
+  "learned_facts": [
+    "User's GitHub username is revanthbarthu.",
+    "Primary OS environment is Windows.",
+    "Primary shell preference is PowerShell."
+  ],
+  "created_at": "2026-09-09T22:13:43.659768",
+  "updated_at": "2026-09-09T22:13:45.465157"
+}

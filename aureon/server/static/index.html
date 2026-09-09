@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#00f0ff" />
+  <title>AUREON — Autonomous System Intelligence</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="hud-container">
+    <!-- Top System Header -->
+    <header class="hud-header">
+      <div class="brand">
+        <div class="pulse-indicator"></div>
+        <span class="brand-title">AUREON</span>
+        <span class="brand-sub">OPERATING INTELLIGENCE</span>
+      </div>
+
+      <div class="system-stats">
+        <div class="stat-box">
+          <span class="stat-label">LLM ENGINE</span>
+          <span id="backend-badge" class="stat-val badge">CONNECTING...</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">CPU LOAD</span>
+          <span id="cpu-stat" class="stat-val">0%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">RAM</span>
+          <span id="ram-stat" class="stat-val">0%</span>
+        </div>
+        <div class="stat-box d-mobile-none">
+          <span class="stat-label">NET IP</span>
+          <span id="net-stat" class="stat-val">ONLINE</span>
+        </div>
+        <button id="audio-toggle-btn" class="icon-btn" title="Toggle Procedural Audio FX">🔊 FX: ON</button>
+        <button id="memory-btn" class="icon-btn" title="Inspect Memory Ledger">🧠 MEMORY</button>
+      </div>
+    </header>
+
+    <!-- Quick Actions Bar -->
+    <section class="quick-actions-bar">
+      <button class="quick-btn" data-query="What is my CPU, RAM, and battery status?">📊 TELEMETRY</button>
+      <button class="quick-btn" data-query="Take a screenshot">📸 SCREENSHOT</button>
+      <button class="quick-btn" data-query="What windows are currently open?">🪟 WINDOWS</button>
+      <button class="quick-btn" data-query="Read my clipboard">📋 CLIPBOARD</button>
+      <button class="quick-btn" data-query="Open notepad">📝 NOTEPAD</button>
+      <button class="quick-btn" data-query="Check my network info">🌐 NETWORK</button>
+    </section>
+
+    <!-- Center Reactor & Voice Core -->
+    <main class="hud-main">
+      <div class="orb-wrapper">
+        <div id="orb-mode-badge" class="orb-mode">SYSTEM READY</div>
+        <canvas id="visualizer" width="400" height="400"></canvas>
+        <div class="orb-overlay">
+          <button id="mic-btn" class="mic-button" title="Push to Speak / Toggle Voice">
+            <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+          <div id="voice-status" class="voice-status-text">CLICK MIC TO SPEAK</div>
+        </div>
+      </div>
+
+      <!-- Chat & Stream Feed -->
+      <section class="stream-panel">
+        <div class="stream-header">
+          <span>OPERATIONAL STREAM</span>
+          <span id="user-badge" class="user-tag">OPERATOR: REVANTHBARTHU</span>
+        </div>
+        <div id="messages-container" class="messages-container">
+          <div class="message assistant">
+            <div class="sender-tag">AUREON CORE</div>
+            <div class="message-content">AUREON production system online. Native hardware, media, and automation subsystems operational. Ready for input.</div>
+          </div>
+        </div>
+
+        <!-- Input Bar -->
+        <form id="chat-form" class="chat-input-bar">
+          <input id="text-input" type="text" placeholder="Issue voice or text command... (e.g. 'Take a screenshot', 'Mute volume')" autocomplete="off" />
+          <button type="submit" class="send-btn">EXECUTE</button>
+        </form>
+      </section>
+    </main>
+
+    <!-- Memory Ledger Modal -->
+    <div id="memory-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>CONTEXTUAL MEMORY LEDGER</h3>
+          <button id="close-memory-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <h4>Active Profile</h4>
+          <pre id="memory-profile">Loading...</pre>
+          <h4>Persistent Event Log</h4>
+          <pre id="memory-ledger">Loading...</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Destructive Action Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+      <div class="modal-card danger-card">
+        <div class="modal-header danger-header">
+          <h3>⚠️ DESTRUCTIVE ACTION CONFIRMATION REQUIRED</h3>
+        </div>
+        <div class="modal-body">
+          <p id="confirm-text" class="danger-text">This action will permanently modify or delete system files.</p>
+          <pre id="confirm-details"></pre>
+        </div>
+        <div class="modal-footer">
+          <button id="deny-action-btn" class="btn btn-secondary">ABORT</button>
+          <button id="confirm-action-btn" class="btn btn-danger">CONFIRM EXECUTION</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sounds.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

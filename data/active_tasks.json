@@ -1,0 +1,13 @@
+{
+  "active_tasks": [
+    {
+      "id": "task_1788972641",
+      "title": "Hourly Diagnostics Check",
+      "task_type": "health_check",
+      "interval_seconds": 3600,
+      "last_run": "2026-09-09T22:23:26.149213",
+      "created_at": "2026-09-09T22:20:41.091754"
+    }
+  ],
+  "updated_at": "2026-09-09T22:23:26.149213"
+}
