@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ DATA_DIR.mkdir(exist_ok=True, parents=True)
 class AureonSettings(BaseModel):
     # Gemini Settings (Primary Cloud Brain)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 
     # NVIDIA Nemotron Settings
     nvidia_api_key: str = os.getenv("NVIDIA_API_KEY", "")
