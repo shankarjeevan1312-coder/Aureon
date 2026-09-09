@@ -1,4 +1,4 @@
-import os
+﻿import os
 import subprocess
 import webbrowser
 import fnmatch
@@ -10,29 +10,49 @@ class LaunchAppTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="launch_app",
-            description="Launch an installed desktop application (e.g. notepad, calc, code, chrome, mspaint).",
+            description="Launch an installed desktop application (e.g. whatsapp, spotify, notepad, calc, code, chrome, mspaint).",
             is_destructive=False
         )
 
     async def execute(self, app_name: str, **kwargs) -> ToolResult:
-        known_apps = {
-            "notepad": "notepad.exe",
+        clean_name = app_name.lower().strip()
+
+        # Protocol handlers & common executables
+        app_map = {
+            "whatsapp": "whatsapp:",
+            "spotify": "spotify:",
+            "discord": "discord:",
+            "telegram": "tg:",
+            "teams": "msteams:",
+            "settings": "ms-settings:",
+            "store": "ms-windows-store:",
+            "camera": "microsoft.windows.camera:",
             "calculator": "calc.exe",
             "calc": "calc.exe",
+            "notepad": "notepad.exe",
             "paint": "mspaint.exe",
             "mspaint": "mspaint.exe",
             "explorer": "explorer.exe",
             "cmd": "cmd.exe",
             "powershell": "powershell.exe",
             "code": "code",
+            "vs code": "code",
+            "vscode": "code",
             "chrome": "chrome",
-            "edge": "msedge"
+            "google chrome": "chrome",
+            "edge": "msedge",
+            "microsoft edge": "msedge"
         }
 
-        target = known_apps.get(app_name.lower(), app_name)
+        target = app_map.get(clean_name, clean_name)
+
         try:
-            # Launch without blocking
-            subprocess.Popen(target, shell=True)
+            # On Windows, 'start "" <target>' opens executables, shortcuts, and URI protocols (like whatsapp:)
+            if target.endswith(":") or clean_name in ["whatsapp", "spotify", "discord"]:
+                subprocess.Popen(f'powershell.exe -NoProfile -Command "Start-Process \'{target}\'"', shell=True)
+            else:
+                subprocess.Popen(f'start "" "{target}"', shell=True)
+
             return ToolResult(
                 tool_name=self.name,
                 success=True,
@@ -40,6 +60,16 @@ class LaunchAppTool(BaseTool):
                 voice_summary=f"Launching {app_name}."
             )
         except Exception as e:
+            # Fallback for web apps like WhatsApp
+            if clean_name == "whatsapp":
+                webbrowser.open("https://web.whatsapp.com")
+                return ToolResult(
+                    tool_name=self.name,
+                    success=True,
+                    output="Opened WhatsApp Web in browser.",
+                    voice_summary="Opening WhatsApp in your browser."
+                )
+
             return ToolResult(
                 tool_name=self.name,
                 success=False,
@@ -84,7 +114,6 @@ class SearchFilesTool(BaseTool):
         matches = []
         try:
             for root, dirs, files in os.walk(search_dir):
-                # Ignore hidden and system dirs
                 dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ["AppData", "node_modules", ".git"]]
                 for filename in fnmatch.filter(files, f"*{pattern}*"):
                     matches.append(os.path.join(root, filename))
@@ -100,7 +129,7 @@ class SearchFilesTool(BaseTool):
                 voice_summary=f"Found {len(matches)} matching files." if matches else "No matching files found."
             )
         except Exception as e:
-            return ToolResult(tool_name=self.name, success=False, output=str(e), voice_summary="File search error.")
+            return ToolResult(tool_name=self.name, success=False, output=str(e), voice_summary="Error occurred searching files.")
 
 registry.register(LaunchAppTool())
 registry.register(OpenUrlTool())
