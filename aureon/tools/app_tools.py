@@ -2,7 +2,6 @@
 import re
 import json
 import subprocess
-import webbrowser
 import fnmatch
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -23,18 +22,25 @@ COMMON_WEBSITES = {
     "gmail": "https://mail.google.com",
     "amazon": "https://www.amazon.com",
     "facebook": "https://www.facebook.com",
-    "discord web": "https://discord.com/app",
+    "discord": "https://discord.com/app",
     "whatsapp web": "https://web.whatsapp.com",
     "leetcode": "https://leetcode.com",
     "stackoverflow": "https://stackoverflow.com",
-    "huggingface": "https://huggingface.co"
+    "spotify web": "https://open.spotify.com"
 }
+
+def open_url_system(url: str):
+    """Reliably opens a URL in a new browser tab/window on Windows."""
+    try:
+        subprocess.Popen(f'powershell.exe -NoProfile -Command "Start-Process \'{url}\'"', shell=True)
+    except Exception:
+        os.system(f'start "" "{url}"')
 
 class LaunchAppTool(BaseTool):
     """
     Universal App & Web Launcher for Windows:
-    1. Scans and launches ANY installed Windows application (Win32, Store, UWP).
-    2. Opens ANY website or browser query.
+    1. Opens ANY website or web app in a new browser tab.
+    2. Opens ANY installed desktop app from Windows StartApps index.
     """
     def __init__(self):
         super().__init__(
@@ -46,7 +52,6 @@ class LaunchAppTool(BaseTool):
         self._refresh_installed_apps()
 
     def _refresh_installed_apps(self):
-        """Scans Windows Get-StartApps to index every installed app on the PC."""
         try:
             cmd = "Get-StartApps | ConvertTo-Json"
             proc = subprocess.run(
@@ -71,18 +76,27 @@ class LaunchAppTool(BaseTool):
         except Exception:
             pass
 
-    def _find_installed_app(self, query: str) -> Optional[str]:
+    def _clean_query(self, query: str) -> str:
         q = query.lower().strip()
+        # Strip trailing filler words like "app", "application", "desktop", "software"
+        q = re.sub(r"\b(app|application|software|program)\b", "", q).strip()
+        return q
+
+    def _find_installed_app(self, query: str) -> Optional[str]:
+        q = self._clean_query(query)
+        if not q:
+            return None
+
         # 1. Exact match
         if q in self._installed_apps_cache:
             return self._installed_apps_cache[q]
 
-        # 2. Prefix / Substring match (e.g. "code" -> "visual studio code")
+        # 2. Substring match
         for name, app_id in self._installed_apps_cache.items():
             if q == name or q in name or name in q:
                 return app_id
 
-        # 3. Word token matching
+        # 3. Token match
         tokens = q.split()
         for name, app_id in self._installed_apps_cache.items():
             if any(t in name for t in tokens if len(t) > 2):
@@ -91,34 +105,40 @@ class LaunchAppTool(BaseTool):
         return None
 
     async def execute(self, app_name: str, **kwargs) -> ToolResult:
-        clean = app_name.lower().strip()
+        raw_clean = app_name.lower().strip()
+        clean = self._clean_query(raw_clean)
 
-        # Check if the user is asking for a known website or web URL
-        if clean in COMMON_WEBSITES:
-            url = COMMON_WEBSITES[clean]
-            webbrowser.open(url)
+        # 1. Check if the user is asking for a known website or web platform
+        matched_web = None
+        for site_name, site_url in COMMON_WEBSITES.items():
+            if clean == site_name or clean in site_name or site_name in clean:
+                matched_web = (site_name, site_url)
+                break
+
+        if matched_web:
+            site_name, site_url = matched_web
+            open_url_system(site_url)
             return ToolResult(
                 tool_name=self.name,
                 success=True,
-                output=f"Opened {clean} in default browser ({url}).",
-                voice_summary=f"Opening {clean} in your browser."
+                output={"type": "url", "url": site_url, "name": site_name},
+                voice_summary=f"Opening {site_name} in your browser."
             )
 
         if clean.startswith("http://") or clean.startswith("https://") or re.search(r"\.(com|org|net|io|co|in|edu|gov)$", clean):
             url = clean if clean.startswith("http") else f"https://{clean}"
-            webbrowser.open(url)
+            open_url_system(url)
             return ToolResult(
                 tool_name=self.name,
                 success=True,
-                output=f"Opened website: {url}",
+                output={"type": "url", "url": url, "name": clean},
                 voice_summary=f"Opening {clean} in your browser."
             )
 
-        # Look up installed app in Windows StartApps index
+        # 2. Look up installed app in Windows StartApps index
         app_id = self._find_installed_app(clean)
         if app_id:
             try:
-                # Launch via Windows shell:AppsFolder protocol (works for all Win32 and UWP Store apps)
                 subprocess.Popen(
                     f'powershell.exe -NoProfile -Command "Start-Process \'shell:AppsFolder\\{app_id}\'"',
                     shell=True
@@ -126,31 +146,31 @@ class LaunchAppTool(BaseTool):
                 return ToolResult(
                     tool_name=self.name,
                     success=True,
-                    output=f"Launched application '{app_name}' (AppID: {app_id}).",
+                    output={"type": "app", "name": app_name, "app_id": app_id},
                     voice_summary=f"Launching {app_name}."
                 )
-            except Exception as e:
+            except Exception:
                 pass
 
-        # Try standard Windows 'start' command for direct executables or protocols
+        # 3. Try standard Windows 'start' command for direct executables or protocols
         try:
             subprocess.Popen(f'start "" "{clean}"', shell=True)
             return ToolResult(
                 tool_name=self.name,
                 success=True,
-                output=f"Launched '{app_name}' via Windows system.",
+                output={"type": "app", "name": app_name},
                 voice_summary=f"Opening {app_name}."
             )
         except Exception:
             pass
 
-        # If not installed, fallback to opening as a web search / website
+        # 4. Fallback: Search in browser
         fallback_url = f"https://www.google.com/search?q={clean}"
-        webbrowser.open(fallback_url)
+        open_url_system(fallback_url)
         return ToolResult(
             tool_name=self.name,
             success=True,
-            output=f"'{app_name}' not found locally. Opened search in browser: {fallback_url}",
+            output={"type": "url", "url": fallback_url, "name": clean},
             voice_summary=f"Searching for {app_name} in your browser."
         )
 
@@ -158,31 +178,35 @@ class OpenUrlTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="open_url",
-            description="Open any web address, website, or search query in the default browser.",
+            description="Open any web address, website, or search query in a new browser tab.",
             is_destructive=False
         )
 
     async def execute(self, url: str, **kwargs) -> ToolResult:
         clean = url.strip()
-        try:
-            if clean.lower() in COMMON_WEBSITES:
-                final_url = COMMON_WEBSITES[clean.lower()]
-            elif clean.startswith("http://") or clean.startswith("https://"):
+        clean_lower = clean.lower()
+
+        final_url = None
+        for site_name, site_url in COMMON_WEBSITES.items():
+            if clean_lower == site_name or clean_lower in site_name:
+                final_url = site_url
+                break
+
+        if not final_url:
+            if clean.startswith("http://") or clean.startswith("https://"):
                 final_url = clean
             elif re.search(r"^[a-zA-Z0-9\-]+(\.[a-zA-Z]{2,})", clean):
                 final_url = f"https://{clean}"
             else:
                 final_url = f"https://www.google.com/search?q={clean}"
 
-            webbrowser.open(final_url)
-            return ToolResult(
-                tool_name=self.name,
-                success=True,
-                output=f"Opened in browser: {final_url}",
-                voice_summary="Opening that in your browser."
-            )
-        except Exception as e:
-            return ToolResult(tool_name=self.name, success=False, output=str(e), voice_summary="Failed to open browser.")
+        open_url_system(final_url)
+        return ToolResult(
+            tool_name=self.name,
+            success=True,
+            output={"type": "url", "url": final_url},
+            voice_summary="Opening that in your browser."
+        )
 
 class SearchFilesTool(BaseTool):
     def __init__(self):

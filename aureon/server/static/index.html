@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -38,19 +38,22 @@
           <span class="stat-label">NET IP</span>
           <span id="net-stat" class="stat-val">ONLINE</span>
         </div>
-        <button id="audio-toggle-btn" class="icon-btn" title="Toggle Procedural Audio FX">🔊 FX: ON</button>
+        <button id="voice-mode-btn" class="icon-btn" title="Toggle between Instant Browser Speech and Neural Edge-TTS">⚡ INSTANT VOICE</button>
+        <button id="stop-speech-btn" class="icon-btn" style="color:var(--red-glow);border-color:var(--red-glow);" title="Stop speaking immediately">🛑 STOP AUDIO</button>
+        <button id="audio-toggle-btn" class="icon-btn" title="Toggle UI Sound FX">🔊 FX: ON</button>
         <button id="memory-btn" class="icon-btn" title="Inspect Memory Ledger">🧠 MEMORY</button>
       </div>
     </header>
 
     <!-- Quick Actions Bar -->
     <section class="quick-actions-bar">
+      <button class="quick-btn" data-query="Open YouTube">▶️ YOUTUBE</button>
+      <button class="quick-btn" data-query="Open WhatsApp">💬 WHATSAPP</button>
       <button class="quick-btn" data-query="What is my CPU, RAM, and battery status?">📊 TELEMETRY</button>
       <button class="quick-btn" data-query="Take a screenshot">📸 SCREENSHOT</button>
       <button class="quick-btn" data-query="What windows are currently open?">🪟 WINDOWS</button>
       <button class="quick-btn" data-query="Read my clipboard">📋 CLIPBOARD</button>
       <button class="quick-btn" data-query="Open notepad">📝 NOTEPAD</button>
-      <button class="quick-btn" data-query="Check my network info">🌐 NETWORK</button>
     </section>
 
     <!-- Center Reactor & Voice Core -->
@@ -73,18 +76,18 @@
       <section class="stream-panel">
         <div class="stream-header">
           <span>OPERATIONAL STREAM</span>
-          <span id="user-badge" class="user-tag">OPERATOR: REVANTHBARTHU</span>
+          <span id="user-badge" class="user-tag">OPERATOR: JEEVAN</span>
         </div>
         <div id="messages-container" class="messages-container">
           <div class="message assistant">
             <div class="sender-tag">AUREON CORE</div>
-            <div class="message-content">AUREON production system online. Native hardware, media, and automation subsystems operational. Ready for input.</div>
+            <div class="message-content">AUREON operating system active. Gemini intelligence online. Ready for your commands.</div>
           </div>
         </div>
 
         <!-- Input Bar -->
         <form id="chat-form" class="chat-input-bar">
-          <input id="text-input" type="text" placeholder="Issue voice or text command... (e.g. 'Take a screenshot', 'Mute volume')" autocomplete="off" />
+          <input id="text-input" type="text" placeholder="Issue voice or text command... (e.g. 'Open YouTube', 'Take a screenshot', 'Mute volume')" autocomplete="off" />
           <button type="submit" class="send-btn">EXECUTE</button>
         </form>
       </section>

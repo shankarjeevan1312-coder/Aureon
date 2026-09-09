@@ -1,11 +1,12 @@
-document.addEventListener("DOMContentLoaded", () => {
+﻿document.addEventListener("DOMContentLoaded", () => {
   // Elements
   const backendBadge = document.getElementById("backend-badge");
   const cpuStat = document.getElementById("cpu-stat");
   const ramStat = document.getElementById("ram-stat");
-  const netStat = document.getElementById("net-stat");
   const orbModeBadge = document.getElementById("orb-mode-badge");
   const audioToggleBtn = document.getElementById("audio-toggle-btn");
+  const voiceModeBtn = document.getElementById("voice-mode-btn");
+  const stopSpeechBtn = document.getElementById("stop-speech-btn");
   const messagesContainer = document.getElementById("messages-container");
   const chatForm = document.getElementById("chat-form");
   const textInput = document.getElementById("text-input");
@@ -32,11 +33,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let socket = null;
   let audioPlayer = new Audio();
 
+  // Voice Modes: "instant" (Web Speech API, 0s delay) vs "neural" (Edge-TTS via server)
+  let voiceMode = "instant"; // Default to instant for lightning response
+
   // Register Service Worker for PWA
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch((err) => {
-      console.log("ServiceWorker registration skipped: ", err);
-    });
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
 
   // Audio FX Toggle
@@ -46,6 +48,38 @@ document.addEventListener("DOMContentLoaded", () => {
     window.aureonSounds.enabled = audioFxEnabled;
     audioToggleBtn.textContent = audioFxEnabled ? "🔊 FX: ON" : "🔇 FX: OFF";
     if (audioFxEnabled) window.aureonSounds.playClick();
+  });
+
+  // Voice Mode Toggle
+  voiceModeBtn.addEventListener("click", () => {
+    if (voiceMode === "instant") {
+      voiceMode = "neural";
+      voiceModeBtn.textContent = "🎙️ NEURAL TTS";
+    } else {
+      voiceMode = "instant";
+      voiceModeBtn.textContent = "⚡ INSTANT VOICE";
+    }
+    stopAnySpeaking();
+    if (window.aureonSounds) window.aureonSounds.playClick();
+  });
+
+  // Instant Audio Stop Function
+  function stopAnySpeaking() {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (audioPlayer) {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      audioPlayer.src = "";
+    }
+    isSpeaking = false;
+    updateOrbBadge();
+  }
+
+  stopSpeechBtn.addEventListener("click", () => {
+    stopAnySpeaking();
+    if (window.aureonSounds) window.aureonSounds.playClick();
   });
 
   // Quick Action Buttons
@@ -99,36 +133,32 @@ document.addEventListener("DOMContentLoaded", () => {
       amplitude = 18;
       primaryColor = "rgba(255, 51, 68, ";
     } else if (isProcessing) {
-      speed = 0.12;
-      amplitude = 12;
-      primaryColor = "rgba(255, 184, 0, ";
-    } else if (isSpeaking) {
       speed = 0.07;
-      amplitude = 14;
-      primaryColor = "rgba(0, 240, 255, ";
+      amplitude = 12;
+      primaryColor = "rgba(255, 170, 0, ";
+    } else if (isSpeaking) {
+      speed = 0.08;
+      amplitude = 22;
+      primaryColor = "rgba(0, 255, 204, ";
     }
 
     pulsePhase += speed;
-    const dynamicRadius = baseRadius + Math.sin(pulsePhase) * amplitude;
 
-    // Glowing outer rings
-    for (let i = 3; i > 0; i--) {
+    for (let r = 0; r < 3; r++) {
+      const ringRadius = baseRadius + r * 22 + Math.sin(pulsePhase + r) * amplitude;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, dynamicRadius + i * 22, 0, Math.PI * 2);
-      ctx.strokeStyle = `${primaryColor}${0.12 * i})`;
-      ctx.lineWidth = 1.5;
+      ctx.arc(centerX, centerY, Math.max(ringRadius, 10), 0, Math.PI * 2);
+      ctx.strokeStyle = `${primaryColor}${0.75 - r * 0.22})`;
+      ctx.lineWidth = 2.2 - r * 0.5;
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = `${primaryColor}0.9)`;
       ctx.stroke();
     }
 
-    // Inner glowing core
-    const gradient = ctx.createRadialGradient(centerX, centerY, 8, centerX, centerY, dynamicRadius);
-    gradient.addColorStop(0, `${primaryColor}0.9)`);
-    gradient.addColorStop(0.6, `${primaryColor}0.25)`);
-    gradient.addColorStop(1, `${primaryColor}0)`);
-
-    ctx.fillStyle = gradient;
+    // Core
     ctx.beginPath();
-    ctx.arc(centerX, centerY, dynamicRadius, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, 38 + Math.sin(pulsePhase * 1.5) * 4, 0, Math.PI * 2);
+    ctx.fillStyle = `${primaryColor}0.25)`;
     ctx.fill();
 
     updateOrbBadge();
@@ -136,7 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   drawOrb();
 
-  // Initialize Speech Recognition
+  // Speech Recognition (Web Speech API)
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
@@ -145,6 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
+      stopAnySpeaking(); // Stop talking whenever user speaks!
       isListening = true;
       micBtn.classList.add("listening");
       voiceStatus.textContent = "LISTENING...";
@@ -166,10 +197,11 @@ document.addEventListener("DOMContentLoaded", () => {
       stopListening();
     };
   } else {
-    voiceStatus.textContent = "SPEECH API NOT SUPPORTED IN THIS BROWSER (USE TEXT)";
+    voiceStatus.textContent = "SPEECH API NOT SUPPORTED (USE TEXT)";
   }
 
   function toggleListening() {
+    stopAnySpeaking(); // Stop any audio immediately on mic click
     if (!recognition) return;
     if (isListening) {
       recognition.stop();
@@ -189,6 +221,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   micBtn.addEventListener("click", toggleListening);
+
+  // Keyboard shortcut: Spacebar holds to speak if text input is not focused
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Escape") {
+      stopAnySpeaking();
+    }
+  });
 
   // WebSocket Connection
   function connectWebSocket() {
@@ -222,6 +261,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Submit User Message
   function handleUserSubmit(message) {
     if (!message || !message.trim()) return;
+    stopAnySpeaking(); // Stop any audio when user enters command
+
     appendMessage("USER", message, "user");
     textInput.value = "";
     isProcessing = true;
@@ -256,11 +297,31 @@ document.addEventListener("DOMContentLoaded", () => {
       backendBadge.textContent = payload.backend_used.toUpperCase();
     }
 
-    // Check if a tool returned a screenshot image URL
+    // Process Tool Results
     if (payload.tool_results && payload.tool_results.length > 0) {
       payload.tool_results.forEach((tool) => {
+        // Screenshot rendering
         if (tool.tool_name === "capture_screenshot" && tool.output && tool.output.url) {
           appendImage(tool.output.url);
+        }
+
+        // Automatic URL Tab Launching
+        let targetUrl = null;
+        if (tool.output && typeof tool.output === "object" && tool.output.url) {
+          targetUrl = tool.output.url;
+        } else if (typeof tool.output === "string") {
+          const match = tool.output.match(/https?:\/\/[^\s\)]+/);
+          if (match) targetUrl = match[0];
+        }
+
+        if (targetUrl) {
+          // Open URL in new browser tab
+          try {
+            window.open(targetUrl, "_blank");
+          } catch (e) {
+            console.warn("Popup blocked; fallback to link.", e);
+          }
+          appendUrlButton(targetUrl);
         }
       });
     }
@@ -276,28 +337,66 @@ document.addEventListener("DOMContentLoaded", () => {
       if (window.aureonSounds) window.aureonSounds.playComplete();
     }
 
-    // Play synthesized voice if available
+    // Play synthesized voice immediately
     if (payload.voice_text) {
       playVoice(payload.voice_text);
     }
   }
 
+  // Voice Output (Instant Web Speech or Neural Edge-TTS)
   function playVoice(text) {
-    const encoded = encodeURIComponent(text);
-    audioPlayer.src = `/api/tts?text=${encoded}`;
-    isSpeaking = true;
+    stopAnySpeaking(); // Always cancel any playing audio before starting new speech
 
-    audioPlayer.onended = () => {
-      isSpeaking = false;
-    };
-    audioPlayer.onerror = () => {
-      isSpeaking = false;
-    };
+    if (!text || !text.trim()) return;
 
-    audioPlayer.play().catch((e) => {
-      isSpeaking = false;
-      console.warn("Audio autoplay blocked by browser policy; click anywhere to enable audio.", e);
-    });
+    if (voiceMode === "instant" && "speechSynthesis" in window) {
+      // 0ms Latency Instant Browser Speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+
+      // Select a natural voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("David") || v.name.includes("Guy")));
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => {
+        isSpeaking = true;
+        updateOrbBadge();
+      };
+      utterance.onend = () => {
+        isSpeaking = false;
+        updateOrbBadge();
+      };
+      utterance.onerror = () => {
+        isSpeaking = false;
+        updateOrbBadge();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      // Neural Edge-TTS Mode
+      const encoded = encodeURIComponent(text);
+      audioPlayer.src = `/api/tts?text=${encoded}`;
+      isSpeaking = true;
+      updateOrbBadge();
+
+      audioPlayer.onended = () => {
+        isSpeaking = false;
+        updateOrbBadge();
+      };
+      audioPlayer.onerror = () => {
+        isSpeaking = false;
+        updateOrbBadge();
+      };
+
+      audioPlayer.play().catch(() => {
+        isSpeaking = false;
+        updateOrbBadge();
+      });
+    }
   }
 
   function appendMessage(sender, content, type) {
@@ -315,6 +414,19 @@ document.addEventListener("DOMContentLoaded", () => {
     msgDiv.appendChild(tag);
     msgDiv.appendChild(body);
     messagesContainer.appendChild(msgDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  function appendUrlButton(url) {
+    const btnDiv = document.createElement("div");
+    btnDiv.className = "message assistant";
+    btnDiv.innerHTML = `
+      <div class="sender-tag">WEB ACCESS</div>
+      <a href="${url}" target="_blank" style="display:inline-block; margin-top:0.4rem; padding:0.4rem 0.8rem; background:rgba(0,240,255,0.15); border:1px solid var(--cyan-glow); color:var(--cyan-glow); text-decoration:none; border-radius:4px; font-weight:600;">
+        🔗 OPEN TAB: ${url}
+      </a>
+    `;
+    messagesContainer.appendChild(btnDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
