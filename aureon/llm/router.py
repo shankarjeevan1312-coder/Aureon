@@ -1,5 +1,6 @@
-import logging
+﻿import logging
 from typing import List, Dict, Any, Tuple
+from aureon.llm.gemini import GeminiClient
 from aureon.llm.nemotron import NemotronClient
 from aureon.llm.ollama import OllamaClient
 
@@ -8,16 +9,20 @@ logger = logging.getLogger("aureon.router")
 class LLMRouter:
     """
     Intelligent LLM Router conforming to Section 2.8 of AUREON Master Spec:
-    1. Primary: NVIDIA Nemotron API
-    2. Fallback: Local Ollama
-    3. Offline/Diagnostic: Built-in local rule-based intent executor
+    1. Primary: Google Gemini 2.0 Flash (Fastest, zero-cost, 1M context, no expiration)
+    2. Secondary: NVIDIA Nemotron API (40 RPM free tier)
+    3. Fallback: Local Ollama (100% offline)
+    4. Diagnostic: Built-in local rule-based intent executor
     """
 
     def __init__(self):
+        self.gemini = GeminiClient()
         self.nemotron = NemotronClient()
         self.ollama = OllamaClient()
 
     async def get_active_backend(self) -> str:
+        if self.gemini.is_configured():
+            return "gemini"
         if self.nemotron.is_configured():
             return "nemotron"
         if await self.ollama.is_available():
@@ -28,7 +33,15 @@ class LLMRouter:
         """
         Returns: (response_text, backend_used)
         """
-        # 1. Try Primary: NVIDIA Nemotron API
+        # 1. Try Primary: Google Gemini 2.0 Flash
+        if self.gemini.is_configured():
+            try:
+                text = await self.gemini.generate_response(messages)
+                return text, "gemini"
+            except Exception as e:
+                logger.warning(f"Gemini API call failed ({e}). Falling back to Nemotron/Ollama...")
+
+        # 2. Try Secondary: NVIDIA Nemotron API
         if self.nemotron.is_configured():
             try:
                 text = await self.nemotron.generate_response(messages)
@@ -36,7 +49,7 @@ class LLMRouter:
             except Exception as e:
                 logger.warning(f"Nemotron API call failed ({e}). Falling back to Ollama...")
 
-        # 2. Try Fallback: Local Ollama
+        # 3. Try Fallback: Local Ollama
         if await self.ollama.is_available():
             try:
                 text = await self.ollama.generate_response(messages)
@@ -44,8 +57,7 @@ class LLMRouter:
             except Exception as e:
                 logger.warning(f"Ollama fallback failed ({e}).")
 
-        # 3. Offline Diagnostic / Simulation Mode
-        # If neither is configured, parse intent or provide diagnostic instruction
+        # 4. Offline Diagnostic / Simulation Mode
         last_user_msg = ""
         for m in reversed(messages):
             if m.get("role") == "user":
@@ -85,13 +97,13 @@ class LLMRouter:
         if "notepad" in query:
             return "[TOOL: launch_app]\n[ARGS: {\"app_name\": \"notepad\"}]\n[CONFIRM: no]\nLaunching Notepad immediately."
 
-        if "github" in query or "username" in query or "revanth" in query:
-            return "Your GitHub username is revanthbarthu. System parameters and memory are synchronized."
+        if "github" in query or "username" in query:
+            return "System parameters and memory are synchronized."
 
         if "delete" in query or "remove" in query:
             return "[TOOL: delete_file]\n[ARGS: {\"path\": \"example_file.txt\"}]\n[CONFIRM: yes]\nThis will delete the requested file. This cannot be undone. Confirm? Yes/No"
 
         return (
             "AUREON operating system active. To enable continuous conversational reasoning, "
-            "provide an NVIDIA Nemotron API key in your .env file or start local Ollama with Mistral."
+            "provide a Google Gemini API key or NVIDIA Nemotron key in your .env file, or start local Ollama."
         )

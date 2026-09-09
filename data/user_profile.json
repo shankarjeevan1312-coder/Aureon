@@ -1,6 +1,6 @@
-{
-  "user_name": "Revanth",
-  "github_username": "revanthbarthu",
+﻿{
+  "user_name": "Jeevan",
+  "github_username": "shankarjeevan1312-coder",
   "os": "Windows",
   "assistant_name": "AUREON",
   "tone": "Composed, concise, articulate, calm, effortlessly efficient",
@@ -10,7 +10,7 @@
     "default_shell": "powershell"
   },
   "learned_facts": [
-    "User's GitHub username is revanthbarthu.",
+    "User's GitHub username is shankarjeevan1312-coder.",
     "Primary OS environment is Windows.",
     "Primary shell preference is PowerShell."
   ],
