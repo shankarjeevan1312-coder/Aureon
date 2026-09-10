@@ -1,10 +1,11 @@
-import re
+﻿import re
 import json
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from aureon.config import settings
 from aureon.llm.router import LLMRouter
 from aureon.memory.memory_manager import MemoryManager
+import aureon.tools # Ensure all tools are registered
 from aureon.tools.base import registry, ToolResult
 from aureon.voice.tts_engine import clean_text_for_speech
 
@@ -36,10 +37,12 @@ Available Tools:
 - write_file(path="...", content="...", append=False): Create or write file content.
 - delete_file(path="..."): Permanently delete file/folder (REQUIRES CONFIRMATION: yes).
 - kill_process(name="..." or pid=...): Terminate running process (REQUIRES CONFIRMATION: yes).
-- launch_app(app_name="..."): Launch desktop application (e.g. notepad, calc, code, chrome).
-- open_url(url="..."): Open browser URL or search web.
+- launch_app(app_name="..."): Launch any desktop application or website (e.g. whatsapp, spotify, youtube, notepad, calc, code, chrome).
+- open_url(url="..."): Open any website, web app, or search query in browser.
 - search_files(pattern="..."): Search files on system.
-- send_email(to="...", subject="...", body="..."): Send email (REQUIRES CONFIRMATION: yes).
+- send_whatsapp_message(recipient="...", message="..."): Send message to contact or phone number via WhatsApp.
+- send_email(to="...", subject="...", body="..."): Compose and send email.
+- make_call(phone="..."): Initiate phone or voice call via Windows telephony.
 - create_task_reminder(title="...", due_time="..."): Add task to memory ledger.
 
 Always confirm destructive operations. Follow up tool execution with a brief, clear sentence.
@@ -158,21 +161,37 @@ class Orchestrator:
                     "args": tool_args,
                     "prompt": f"Destructive operation: '{tool_name}'. Proceed? Target: {json.dumps(tool_args)}"
                 }
-                voice_text = "This action requires your confirmation before execution."
-                display_text = f"{raw_response}\n\n⚠️ Confirmation required to proceed with {tool_name}."
             else:
                 # Execute tool immediately
-                result = await registry.run_tool(tool_name, tool_args, confirmed=True)
+                result = await registry.run_tool(tool_name, tool_args)
                 tool_results.append(result)
-                voice_text = result.voice_summary or clean_text_for_speech(raw_response)
-                display_text = f"{raw_response}\n\n[Result]: {result.output}"
-        else:
-            voice_text = clean_text_for_speech(raw_response)
-            display_text = raw_response
 
-        # Update conversation history
+        # 5. Format Conversational & Speech Text
+        # Strip tool blocks from conversational response
+        cleaned_text = re.sub(r"\[TOOL:[^\]]+\]", "", raw_response, flags=re.IGNORECASE)
+        cleaned_text = re.sub(r"\[ARGS:[^\]]+\]", "", cleaned_text, flags=re.IGNORECASE)
+        cleaned_text = re.sub(r"\[CONFIRM:[^\]]+\]", "", cleaned_text, flags=re.IGNORECASE).strip()
+
+        voice_text = clean_text_for_speech(cleaned_text)
+
+        # If a tool ran and had its own voice summary, append or use it
+        if tool_results and not voice_text:
+            voice_text = tool_results[0].voice_summary
+
+        if not voice_text and not tool_results:
+            voice_text = "Action processed."
+
+        # Include tool results in formatted markdown for UI
+        display_text = raw_response
+        if tool_results:
+            for r in tool_results:
+                display_text += f"\n\n[Result]: {r.output}"
+
+        # Update history
         self.conversation_history.append({"role": "user", "content": user_input})
-        self.conversation_history.append({"role": "assistant", "content": display_text})
+        self.conversation_history.append({"role": "assistant", "content": raw_response})
+        if len(self.conversation_history) > 12:
+            self.conversation_history = self.conversation_history[-12:]
 
         return OrchestratorResponse(
             text=display_text,
