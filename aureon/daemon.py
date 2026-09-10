@@ -1,10 +1,16 @@
 ﻿import sys
+from pathlib import Path
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import time
 import queue
 import re
 import asyncio
 import winsound
 import logging
+from typing import Optional
 import numpy as np
 import sounddevice as sd
 import speech_recognition as sr
@@ -20,8 +26,8 @@ logger = logging.getLogger("aureon.daemon")
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 1024
 CHANNELS = 1
-ENERGY_THRESHOLD = 450  # Dynamic VAD threshold
-SILENCE_DURATION = 1.0  # Seconds of silence to end utterance
+ENERGY_THRESHOLD = 450
+SILENCE_DURATION = 1.0
 
 class AureonDaemon:
     def __init__(self):
@@ -30,7 +36,6 @@ class AureonDaemon:
         self.audio_queue = queue.Queue()
         self.running = True
 
-        # Initialize local Windows Speech Synthesizer (0ms delay)
         self.tts = pyttsx3.init()
         self.tts.setProperty("rate", 185)
         voices = self.tts.getProperty("voices")
@@ -69,7 +74,6 @@ class AureonDaemon:
         self.audio_queue.put(bytes(indata))
 
     def record_utterance(self, timeout: float = 8.0) -> Optional[sr.AudioData]:
-        """Collects microphone frames while user is actively speaking."""
         frames = []
         is_speaking = False
         silence_start = None
@@ -127,7 +131,6 @@ class AureonDaemon:
         print("  Say 'Proceed Aureon' or 'Stop' to dismiss.")
         print("=" * 60)
 
-        # Notify readiness
         self.play_wake_chime()
         self.speak("Aureon online. Ready for your command.")
 
@@ -139,12 +142,10 @@ class AureonDaemon:
             callback=self.audio_callback
         ):
             while self.running:
-                # 1. Listen for audio utterance
                 audio = self.record_utterance(timeout=60.0)
                 if not audio:
                     continue
 
-                # 2. Transcribe speech
                 text = self.transcribe(audio)
                 if not text:
                     continue
@@ -152,22 +153,18 @@ class AureonDaemon:
                 lower_text = text.lower()
                 logger.info(f"Heard: '{text}'")
 
-                # Check if wake word present
                 wake_match = re.search(r"\b(hey\s+aureon|aureon|hi\s+aureon|ok\s+aureon)\b", lower_text)
                 if wake_match:
                     self.play_wake_chime()
 
-                    # Check if command was spoken in same sentence
                     command = re.sub(r"^.*?\b(hey\s+aureon|aureon|hi\s+aureon|ok\s+aureon)\b\s*", "", text, flags=re.IGNORECASE).strip()
 
-                    # Dismissal check
                     if re.search(r"\b(proceed|stop|dismiss|cancel|thank you)\b", command, re.IGNORECASE):
                         self.play_standby_chime()
                         self.speak("Standing by.")
                         continue
 
                     if not command:
-                        # User only said "Hey Aureon", prompt and listen for command
                         self.speak("Yes?")
                         follow_up_audio = self.record_utterance(timeout=6.0)
                         if follow_up_audio:
@@ -179,7 +176,6 @@ class AureonDaemon:
                             self.speak("Standing by.")
                             continue
 
-                        # Execute command
                         asyncio.run(self.handle_command(command))
 
 if __name__ == "__main__":
