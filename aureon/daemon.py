@@ -26,8 +26,12 @@ logger = logging.getLogger("aureon.daemon")
 SAMPLE_RATE = 16000
 BLOCK_SIZE = 1024
 CHANNELS = 1
-ENERGY_THRESHOLD = 450
-SILENCE_DURATION = 1.0
+ENERGY_THRESHOLD = 400
+SILENCE_DURATION = 0.9
+
+# Phonetic match for "Aureon" (Google STT often transcribes it as "Aryan", "Orion", "Arian")
+WAKE_PATTERN = re.compile(r"\b(hey\s+|hi\s+|ok\s+)?(aureon|aryan|arian|orion|auron|aryon|orian)\b", re.IGNORECASE)
+DISMISS_PATTERN = re.compile(r"\b(proceed|stop|dismiss|cancel|thank you|goodbye|bye)\b", re.IGNORECASE)
 
 class AureonDaemon:
     def __init__(self):
@@ -36,6 +40,7 @@ class AureonDaemon:
         self.audio_queue = queue.Queue()
         self.running = True
 
+        # Initialize local Windows Speech Synthesizer (0ms delay)
         self.tts = pyttsx3.init()
         self.tts.setProperty("rate", 185)
         voices = self.tts.getProperty("voices")
@@ -73,7 +78,7 @@ class AureonDaemon:
             logger.debug(f"Audio status: {status}")
         self.audio_queue.put(bytes(indata))
 
-    def record_utterance(self, timeout: float = 8.0) -> Optional[sr.AudioData]:
+    def record_utterance(self, timeout: float = 60.0) -> Optional[sr.AudioData]:
         frames = []
         is_speaking = False
         silence_start = None
@@ -118,7 +123,7 @@ class AureonDaemon:
             return ""
 
     async def handle_command(self, command: str):
-        logger.info(f"Processing command: '{command}'")
+        logger.info(f"Executing command: '{command}'")
         resp = await self.orchestrator.process_user_input(command)
         voice_response = resp.voice_text
         if voice_response:
@@ -150,28 +155,32 @@ class AureonDaemon:
                 if not text:
                     continue
 
-                lower_text = text.lower()
-                logger.info(f"Heard: '{text}'")
+                logger.info(f"Heard raw speech: '{text}'")
 
-                wake_match = re.search(r"\b(hey\s+aureon|aureon|hi\s+aureon|ok\s+aureon)\b", lower_text)
-                if wake_match:
+                # Check if wake word present
+                if WAKE_PATTERN.search(text):
                     self.play_wake_chime()
 
-                    command = re.sub(r"^.*?\b(hey\s+aureon|aureon|hi\s+aureon|ok\s+aureon)\b\s*", "", text, flags=re.IGNORECASE).strip()
+                    # Extract the command by stripping the wake word
+                    command = WAKE_PATTERN.sub("", text).strip()
+                    # Clean punctuation
+                    command = re.sub(r"^[,\.\?!;:\s]+|[,\.\?!;:\s]+$", "", command).strip()
 
-                    if re.search(r"\b(proceed|stop|dismiss|cancel|thank you)\b", command, re.IGNORECASE):
+                    # Check dismissal
+                    if DISMISS_PATTERN.search(command) and len(command.split()) <= 3:
                         self.play_standby_chime()
                         self.speak("Standing by.")
                         continue
 
+                    # If user only said the wake word, ask and listen for command
                     if not command:
                         self.speak("Yes?")
-                        follow_up_audio = self.record_utterance(timeout=6.0)
-                        if follow_up_audio:
-                            command = self.transcribe(follow_up_audio)
+                        follow_up = self.record_utterance(timeout=6.0)
+                        if follow_up:
+                            command = self.transcribe(follow_up)
 
                     if command:
-                        if re.search(r"\b(proceed|stop|dismiss|cancel|thank you)\b", command, re.IGNORECASE):
+                        if DISMISS_PATTERN.search(command) and len(command.split()) <= 3:
                             self.play_standby_chime()
                             self.speak("Standing by.")
                             continue
